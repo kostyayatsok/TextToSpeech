@@ -1,0 +1,56 @@
+{
+    "name": "default_config",
+    "batch_size": 32,
+    "FastSpeech":
+    {
+        "n_phonemes": 42,
+        "n_mels": 80,
+        "n_encoder_blocks": 6,
+        "n_decoder_blocks": 6,
+        "hidden_size": 384,
+        "Encoder":
+        {
+            "num_heads": 6,
+            "kernel_size": 3,
+            "filter_size": 1536,
+            "dropout": 0.1
+        },
+        "Decoder":
+        {
+            "num_heads": 6,
+            "kernel_size": 3,
+            "filter_size": 1536,
+            "dropout": 0.1
+        },
+        "LengthRegulator":
+        {
+            "kernel_size": 3,
+            "dropout": 0.1
+        }
+    },
+    "optimizer":
+    {
+        "type": "Adam",
+        "args":
+        {
+          "lr": 3e-4
+        }
+    },
+    "loss":
+    {
+        "type": "FastSpeechLoss"
+    },
+    "MelSpectrogram": 
+    {
+        "sr"          : 22050,
+        "win_length"  : 1024,
+        "hop_length"  : 256,
+        "n_fft"       : 1024,
+        "f_min"       : 0,
+        "f_max"       : 8000,
+        "n_mels"      : 80,
+        "power"       : 1.0,
+        "pad_value"   : -11.5129251
+    
+    }
+}
