@@ -33,10 +33,12 @@ def main(config):
     for epoch in range(100):
         for batch in train_loader:
             batch['spectrogram'] = featurizer(batch["waveform"]) 
+            batch['durations'] = featurizer(batch["waveform"]) 
             # batch.to(device)
             outputs = text2mel_model(**batch)
             batch.update(outputs)
             loss = criterion(batch)
+            print(loss)
             
 if __name__ == "__main__":
     args = argparse.ArgumentParser(description="PyTorch Template")

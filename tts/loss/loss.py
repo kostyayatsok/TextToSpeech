@@ -10,6 +10,7 @@ class FastSpeechLoss(nn.Module):
         self.criterion_duration = criterion_duration
         self.duration_weight = 1.
     def forward(self, batch, *args, **kwargs):
+        print(batch["spectrogram_pred"].shape, batch["spectrogram"].shape)
         mel_loss = self.criterion_mel(
             batch["spectrogram_pred"], batch["spectrogram"])
         duration_loss = self.criterion_mel(
