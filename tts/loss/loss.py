@@ -1,5 +1,5 @@
 import torch.nn as nn
-from torch import MSELoss
+from torch.nn import MSELoss
 
 class FastSpeechLoss(nn.Module):
     def __init__(

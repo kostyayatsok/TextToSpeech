@@ -2,7 +2,7 @@ import argparse
 from tts.utils import ConfigParser
 from torch.utils.data import DataLoader
 from tts.data_utils import LJSpeechCollator, LJSpeechDataset
-from tts.models import FastSpeech, Vocoder
+from tts.models import FastSpeechModel, Vocoder
 import torch
 import numpy as np
 import tts.loss
@@ -22,8 +22,8 @@ def main(config):
         LJSpeechDataset('.'), batch_size=config['batch_size'],
         collate_fn=LJSpeechCollator()
     )
-    text2mel_model = FastSpeech(config["FastSpeech"])
-    vocoder_model = Vocoder()
+    text2mel_model = FastSpeechModel(config["FastSpeech"])
+    # vocoder_model = Vocoder()
     optimizer = config.init_obj(
         config["optimizer"], torch.optim, text2mel_model.parameters()
     )
@@ -32,9 +32,9 @@ def main(config):
 
     for epoch in range(100):
         for batch in train_loader:
-            batch['spectrogram'] = featurizer(batch) 
-            batch.to(device)
-            outputs = text2mel_model(batch)
+            batch['spectrogram'] = featurizer(batch["waveform"]) 
+            # batch.to(device)
+            outputs = text2mel_model(**batch)
             batch.update(outputs)
             loss = criterion(batch)
             

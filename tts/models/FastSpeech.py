@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-class FFTBlock(nn.Model):
+class FFTBlock(nn.Module):
     def __init__(self,
                  num_heads,
                  hidden_size,
@@ -18,14 +18,14 @@ class FFTBlock(nn.Model):
         )
         self.norm_1 = nn.Sequential(
             nn.Dropout(dropout),
-            nn.LayerNorm(),
+            nn.LayerNorm(hidden_size),
         )
         self.norm_2 = nn.Sequential(
             nn.Dropout(dropout),
-            nn.LayerNorm(),
+            nn.LayerNorm(hidden_size),
         )
     def forward(self, input):
-        x, _ = self.attention(input, input, input, mask=None)
+        x, _ = self.attention(input, input, input)
         residual = input
         x = self.norm_1(x + residual)
         residual = x
@@ -38,11 +38,11 @@ class LengthRegulator(nn.Module):
         super().__init__()
         self.net = nn.Sequential(
             nn.Conv1d(hidden_size, hidden_size, kernel_size=kernel_size),
-            nn.LayerNorm(),
+            nn.LayerNorm(hidden_size),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Conv1d(hidden_size, hidden_size, kernel_size=kernel_size),
-            nn.LayerNorm(),
+            nn.LayerNorm(hidden_size),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(hidden_size, 1),
@@ -53,7 +53,7 @@ class LengthRegulator(nn.Module):
         aligned = torch.repeat_interleave(input, durations, dim=-1)
         return durations, aligned
 
-class FastSpeechModel(nn.Model):
+class FastSpeechModel(nn.Module):
     def __init__(self, config, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.embeddings = nn.Embedding(

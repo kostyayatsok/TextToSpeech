@@ -7,7 +7,7 @@ from operator import getitem
 from pathlib import Path
 
 # from tts.logger import setup_logging
-from tts.utils import read_json, write_json, ROOT_PATH
+from tts.utils.util import read_json, write_json, ROOT_PATH
 
 
 class ConfigParser:
@@ -25,7 +25,7 @@ class ConfigParser:
         self.resume = resume
 
         # set save_dir where trained model and log will be saved.
-        save_dir = Path(self.config["trainer"]["save_dir"])
+        save_dir = Path(self.config["save_dir"])
 
         exper_name = self.config["name"]
         if run_id is None:  # use timestamp as default run-id

@@ -1,5 +1,5 @@
-from models.FastSpeech import FastSpeechModel
-from models.Vocoder import Vocoder
+from tts.models.FastSpeech import FastSpeechModel
+from tts.models.Vocoder import Vocoder
 
 __all__ = [
     "FastSpeechModel",

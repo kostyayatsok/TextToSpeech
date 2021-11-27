@@ -1,1 +1,1 @@
-from tts.loss import FastSpeechLoss
+from tts.loss.loss import FastSpeechLoss
