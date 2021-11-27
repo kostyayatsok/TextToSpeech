@@ -96,4 +96,4 @@ class FastSpeechModel(nn.Module):
         x = self.decoder(x)
         spectrogram = self.linear_layer(x)
         spectrogram = spectrogram.transpose(1, 2)
-        return {"spectrogram_pred": spectrogram, "durations_pred": durations}
+        return {"spectrogram_pred": spectrogram, "durations_pred": durations_pred}

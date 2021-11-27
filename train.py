@@ -1,4 +1,5 @@
 import argparse
+from tts.data_utils.Aligner import GraphemeAligner
 from tts.utils import ConfigParser
 from torch.utils.data import DataLoader
 from tts.data_utils import LJSpeechCollator, LJSpeechDataset
@@ -29,11 +30,15 @@ def main(config):
     )
     criterion = config.init_obj(config["loss"], tts.loss)
     featurizer = MelSpectrogram(config["MelSpectrogram"])
-
+    aligner = GraphemeAligner().to(device)
+    
     for epoch in range(100):
         for batch in train_loader:
             batch['spectrogram'] = featurizer(batch["waveform"]) 
-            batch['durations'] = featurizer(batch["waveform"]) 
+            batch['durations'] = aligner(
+                batch["waveform"], batch["waveforn_length"],
+                batch["transcript"]
+            ) * batch['spectrogram'].size(-1)
             # batch.to(device)
             outputs = text2mel_model(**batch)
             batch.update(outputs)
