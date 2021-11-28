@@ -30,20 +30,28 @@ def main(config):
     )
     criterion = config.init_obj(config["loss"], tts.loss)
     featurizer = MelSpectrogram(config["MelSpectrogram"])
-    aligner = GraphemeAligner().to(device)
+    aligner = GraphemeAligner(config["MelSpectrogram"]).to(device)
     
     for epoch in range(100):
         for batch in train_loader:
+            print("start iteration")
             batch['spectrogram'] = featurizer(batch["waveform"]) 
-            batch['durations'] = aligner(
-                batch["waveform"], batch["waveforn_length"],
+            batch['rel_durations'] = aligner(
+                batch["waveform"], batch["waveform_length"],
                 batch["transcript"]
-            ) * batch['spectrogram'].size(-1)
+            )
+            batch['durations'] = (batch['rel_durations'] *\
+                                    batch['spectrogram'].size(-1)).long()
+            print("batch:", batch)
             # batch.to(device)
+            print("go to model")
             outputs = text2mel_model(**batch)
+            print("exit model")
             batch.update(outputs)
-            loss = criterion(batch)
+            print("enter loss")
+            loss = criterion(batch)            
             print(loss)
+            break
             
 if __name__ == "__main__":
     args = argparse.ArgumentParser(description="PyTorch Template")

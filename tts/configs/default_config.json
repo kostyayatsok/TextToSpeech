@@ -1,6 +1,6 @@
 {
     "name": "default_config",
-    "batch_size": 32,
+    "batch_size": 1,
     "save_dir": "save_dir",
     "FastSpeech":
     {
@@ -42,6 +42,8 @@
         "type": "FastSpeechLoss",
         "args":
         {
+            "duration_weight": 1,
+            "mel_silence_value": -11.5129251
         }
     },
     "MelSpectrogram": 
