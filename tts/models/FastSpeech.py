@@ -47,11 +47,15 @@ class LengthRegulator(nn.Module):
     def __init__(self, hidden_size, kernel_size, dropout):
         super().__init__()
         self.net = nn.Sequential(
-            ChannelFirstConv1d(hidden_size, hidden_size, kernel_size=kernel_size, padding='same'),
+            ChannelFirstConv1d(
+                hidden_size, hidden_size,
+                    kernel_size=kernel_size, padding='same'),
             nn.LayerNorm(hidden_size),
             nn.ReLU(),
             nn.Dropout(dropout),
-            ChannelFirstConv1d(hidden_size, hidden_size, kernel_size=kernel_size, padding='same'),
+            ChannelFirstConv1d(
+                hidden_size, hidden_size, 
+                    kernel_size=kernel_size, padding='same'),
             nn.LayerNorm(hidden_size),
             nn.ReLU(),
             nn.Dropout(dropout),
@@ -59,7 +63,8 @@ class LengthRegulator(nn.Module):
             nn.ReLU(), #length >= 1 ==> log(length) >= 0
         )
     def forward(self, input):
-        durations = torch.exp(self.net(input)).long()
+        durations = torch.exp(self.net(input))
+        durations = durations.squeeze(-1)
         return durations
 
 class FastSpeechModel(nn.Module):
@@ -82,7 +87,7 @@ class FastSpeechModel(nn.Module):
         self.linear_layer = nn.Linear(config["hidden_size"], config["n_mels"]) #TODO: set correct in/out channels
     def forward(self, tokens, durations, *args, **kwargs):
         x = self.embeddings(tokens)
-        x = self.positional_encoding_1(x)
+        # x = self.positional_encoding_1(x)
         x = self.encoder(x)
         
         durations_pred = self.length_regulator(x)
@@ -92,8 +97,12 @@ class FastSpeechModel(nn.Module):
             aligned.append(torch.repeat_interleave(one_input, one_dur.view(-1), dim=-2))        
         aligned = pad_sequence(aligned, batch_first=True)
         
-        x = self.positional_encoding_2(aligned)
+        x = aligned
+        # x = self.positional_encoding_2(aligned)
         x = self.decoder(x)
         spectrogram = self.linear_layer(x)
         spectrogram = spectrogram.transpose(1, 2)
-        return {"spectrogram_pred": spectrogram, "durations_pred": durations_pred}
+        return {
+          "spectrogram_pred": spectrogram,
+          "durations_pred": durations_pred
+        }

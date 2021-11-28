@@ -24,6 +24,7 @@ def main(config):
         collate_fn=LJSpeechCollator()
     )
     text2mel_model = FastSpeechModel(config["FastSpeech"])
+    print(f"Total model parameters: {sum(p.numel() for p in text2mel_model.parameters())}")
     # vocoder_model = Vocoder()
     optimizer = config.init_obj(
         config["optimizer"], torch.optim, text2mel_model.parameters()
@@ -34,7 +35,7 @@ def main(config):
     
     for epoch in range(100):
         for batch in train_loader:
-            print("start iteration")
+            optimizer.zero_grad()
             batch['spectrogram'] = featurizer(batch["waveform"]) 
             batch['rel_durations'] = aligner(
                 batch["waveform"], batch["waveform_length"],
@@ -42,15 +43,11 @@ def main(config):
             )
             batch['durations'] = (batch['rel_durations'] *\
                                     batch['spectrogram'].size(-1)).long()
-            print("batch:", batch)
-            # batch.to(device)
-            print("go to model")
             outputs = text2mel_model(**batch)
-            print("exit model")
             batch.update(outputs)
-            print("enter loss")
-            loss = criterion(batch)            
-            print(loss)
+            loss = criterion(batch)
+            loss.backward()
+            optimizer.step()          
             break
             
 if __name__ == "__main__":
