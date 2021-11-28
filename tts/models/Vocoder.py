@@ -1,11 +1,20 @@
 import torch
 import torch.nn as nn
+import sys
+import os
+sys.path.append('waveglow/')
 
 class Vocoder(nn.Module):
     
     def __init__(self):
         super(Vocoder, self).__init__()
-
+        
+        if not os.path.exists('./waveglow_256channels_universal_v5.pt'):
+            from google_drive_downloader import GoogleDriveDownloader as gdd
+            gdd.download_file_from_google_drive(
+                file_id='1rpK8CzAAirq9sWZhe9nlfvxMF1dRgFbF',
+                dest_path='./waveglow_256channels_universal_v5.pt'
+            )
         model = torch.load(
             'waveglow_256channels_universal_v5.pt',
             map_location='cpu')['model']

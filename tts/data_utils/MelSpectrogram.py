@@ -48,10 +48,15 @@ class MelSpectrogram(nn.Module):
             fmin=config["f_min"],
             fmax=config["f_max"]
         ).T
-        
+
         self.mel_spectrogram.mel_scale.fb.copy_(torch.tensor(mel_basis))
 
-    def forward(self, audio: torch.Tensor) -> torch.Tensor:
+        self.transform_length = lambda x:\
+            torch.div(x, config["hop_length"], rounding_mode='floor') + 1
+
+    def forward(
+        self, audio: torch.Tensor, audio_length: torch.Tensor
+    ) -> torch.Tensor:
         """
         :param audio: Expected shape is [B, T]
         :return: Shape is [B, n_mels, T']
@@ -61,4 +66,4 @@ class MelSpectrogram(nn.Module):
             .clamp_(min=1e-5) \
             .log_()
 
-        return mel
+        return {"mel": mel, "mel_length": self.transform_length(audio_length)}

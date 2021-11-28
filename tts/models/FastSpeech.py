@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from torch.nn.utils.rnn import pad_sequence
+import math
 
 class ChannelFirstConv1d(nn.Conv1d):
     def __init__(self, *args, **kwargs):
@@ -67,27 +68,48 @@ class LengthRegulator(nn.Module):
         durations = durations.squeeze(-1)
         return durations
 
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        pe = torch.zeros(max_len, d_model)
+        pe[:,0::2] = torch.sin(position * div_term)
+        pe[:,1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x: torch.tensor) -> torch.tensor:
+        """
+        Args:
+            x: Tensor, shape [batch_size, seq_len, embedding_dim]
+        """
+        x = x + self.pe[:x.size(1),:]
+        return self.dropout(x)
+    
 class FastSpeechModel(nn.Module):
     def __init__(self, config, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.embeddings = nn.Embedding(
             config["n_phonemes"], config["hidden_size"])
-        self.positional_encoding_1 = lambda x : x #TODO: implement positional encoding
+        self.positional_encoding_1 = PositionalEncoding(config["hidden_size"])
         self.encoder = nn.Sequential(
             *[FFTBlock(hidden_size=config["hidden_size"], **config["Encoder"])\
                 for _ in range(config["n_encoder_blocks"])]
         )
         self.length_regulator = LengthRegulator(
             hidden_size=config["hidden_size"], **config["LengthRegulator"])
-        self.positional_encoding_2 = lambda x : x #TODO: implement positional encoding
+        self.positional_encoding_2 = PositionalEncoding(config["hidden_size"])
         self.decoder = nn.Sequential(
             *[FFTBlock(hidden_size=config["hidden_size"], **config["Encoder"])\
                 for _ in range(config["n_decoder_blocks"])]
         )
-        self.linear_layer = nn.Linear(config["hidden_size"], config["n_mels"]) #TODO: set correct in/out channels
+        self.linear_layer = nn.Linear(config["hidden_size"], config["n_mels"])
     def forward(self, tokens, durations, *args, **kwargs):
-        x = self.embeddings(tokens)
-        # x = self.positional_encoding_1(x)
+        x = tokens
+        x = self.embeddings(x)
+        x = self.positional_encoding_1(x)
         x = self.encoder(x)
         
         durations_pred = self.length_regulator(x)
@@ -98,11 +120,11 @@ class FastSpeechModel(nn.Module):
         aligned = pad_sequence(aligned, batch_first=True)
         
         x = aligned
-        # x = self.positional_encoding_2(aligned)
+        x = self.positional_encoding_2(x)
         x = self.decoder(x)
-        spectrogram = self.linear_layer(x)
-        spectrogram = spectrogram.transpose(1, 2)
+        mel = self.linear_layer(x)
+        mel = mel.transpose(1, 2)
         return {
-          "spectrogram_pred": spectrogram,
+          "mel_pred": mel,
           "durations_pred": durations_pred
         }

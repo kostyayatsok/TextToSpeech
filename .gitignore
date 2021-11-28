@@ -1,0 +1,8 @@
+LJSpeech-1.1.tar
+LJSpeech-1.1.tar/*
+**/__pycache__/*
+waveglow/*
+LJSpeech-1.1.tar.bz2
+waveglow_256channels_universal_v5.pt
+save_dir/*
+wandb/*

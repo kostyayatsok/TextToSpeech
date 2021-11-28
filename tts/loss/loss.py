@@ -15,18 +15,17 @@ class FastSpeechLoss(nn.Module):
         self.mel_silence_value = mel_silence_value
 
     def forward(self, batch, *args, **kwargs):
-        length_diff = batch["spectrogram"].size(-1) -\
-                          batch["spectrogram_pred"].size(-1)
-        batch["spectrogram_pred"] = F.pad(
-            batch["spectrogram_pred"], (0, length_diff, 0, 0, 0, 0),
+        length_diff = batch["mel"].size(-1) - batch["mel_pred"].size(-1)
+        batch["mel_pred"] = F.pad(
+            batch["mel_pred"], (0, length_diff, 0, 0, 0, 0),
             "constant", self.mel_silence_value)
         mel_loss = self.criterion_mel(
-            batch["spectrogram_pred"], batch["spectrogram"])
+            batch["mel_pred"], batch["mel"])
         
-        batch["rel_durations_pred"] = batch["durations_pred"] /\
-                                          batch["spectrogram"].size(-1)
+        batch["rel_durations_pred"] =\
+            batch["durations_pred"] / batch["mel_length"]
         duration_loss = self.criterion_duration(
-            batch["rel_durations_pred"].float(), batch["rel_durations"].float())
+            batch["durations_pred"].float(), batch["durations"].float())
 
         print(
             f"Total loss: {(mel_loss + duration_loss).item():.4f}",
