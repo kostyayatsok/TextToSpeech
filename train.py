@@ -9,7 +9,7 @@ import numpy as np
 import tts.loss
 from tts.data_utils import MelSpectrogram
 import wandb
-from torchsummary import summary
+from tqdm import tqdm
 
 # fix random seeds for reproducibility
 SEED = 42
@@ -46,56 +46,78 @@ def main(config):
         config["optimizer"], torch.optim, text2mel_model.parameters()
     )
     criterion = config.init_obj(config["loss"], tts.loss)
-    featurizer = MelSpectrogram(config["MelSpectrogram"])
+    featurizer = MelSpectrogram(config["MelSpectrogram"]).to(device)
     aligner = GraphemeAligner(config["MelSpectrogram"]).to(device)
     if config["wandb"]:
-        wandb.init(config["wandb_name"])
+        wandb.init(project=config["wandb_name"])
 
     def process_batch(batch):
+        batch["tokens"] = batch["tokens"].to(device)
         batch["waveform"] = batch["waveform"].to(device)
         batch["waveform_length"] = batch["waveform_length"].to(device)
-        batch["tokens"] = batch["tokens"].to(device)
-        
         batch.update(featurizer(batch["waveform"], batch["waveform_length"]))
         batch['rel_durations'] = aligner(
             batch["waveform"], batch["waveform_length"], batch["transcript"]
-        )
-        batch['durations'] = (batch['rel_durations'] * batch['mel_length'])
+        ).to(device)
+        batch['durations'] = batch['rel_durations'] * batch['mel_length'][:, None]
         batch['durations'] = batch['durations'].ceil().long()
-        
         outputs = text2mel_model(**batch)
         batch.update(outputs)
         
-        batch["loss"] = criterion(batch)
+        batch.update(criterion(batch))
         return batch
     step = 0
-    for epoch in range(10000):
+    for epoch in tqdm(range(200)):
         for batch in train_loader:
-            batch["epoch"] = epoch
-            batch["step"] = step
-            step += 1            
-            optimizer.zero_grad()
-            batch = process_batch(batch)
-            batch["loss"].backward()
-            optimizer.step()
-            break     
+            try:
+                batch["epoch"] = epoch
+                batch["step"] = step
+                step += 1            
+                optimizer.zero_grad()
+                batch = process_batch(batch)
+                batch["loss"].backward()
+                optimizer.step()
+                batch["loss"] = batch["loss"].item()
+                batch["dur_loss"] = batch["dur_loss"].item()
+                batch["mel_loss"] = batch["mel_loss"].item()
+                if config["wandb"]:
+                    log_batch(batch)
+            except Exception as inst:
+                print(inst)
+                pass
+
         # batch["wavform_pred"] = vocoder_model.inference(batch["mel_pred"]).cpu()
+        val_loss = [[],[],[]]
+        for batch in val_loader:
+            try:
+                batch = process_batch(batch)
+                val_loss[0].append(batch["loss"].item())
+                val_loss[1].append(batch["dur_loss"].item())
+                val_loss[2].append(batch["mel_loss"].item())
+            except Exception as inst:
+                print(inst)
+                pass
+        batch["loss"] = np.mean(val_loss[0])
+        batch["dur_loss"] = np.mean(val_loss[1])
+        batch["mel_loss"] = np.mean(val_loss[2])
+
+        batch["epoch"] = epoch
+        batch["step"] = step
+        step += 1           
         if config["wandb"]:
-            log_batch(batch)    
-        # for batch in val_loader:
-        #     batch["epoch"] = epoch
-        #     batch["step"] = step
-        #     step += 1            
-        #     batch = process_batch(batch)
-        
-def log_batch(batch):
+            log_batch(batch, mode="val")
+
+        torch.save(text2mel_model.state_dict(), "text2mel_model.pt")
+def log_batch(batch, mode="train"):
     idx = np.random.randint(batch["mel"].size(0))
     wandb.log({
-        "loss": batch["loss"],
+        f"loss_{mode}": batch["loss"],
+        f"dur_loss_{mode}": batch["dur_loss"],
+        f"mel_loss_{mode}": batch["mel_loss"],
         "step": batch["step"],
         "epoch": batch["epoch"],
-        "original_mel": wandb.Image(batch["mel"][idx].detach().numpy(), caption="original_mel"),
-        "pred_mel": wandb.Image(batch["mel_pred"][idx].detach().numpy(), caption="mel_pred"),    
+        f"original_mel_{mode}": wandb.Image(batch["mel"][idx].cpu().detach().numpy(), caption="original_mel"),
+        f"pred_mel_{mode}": wandb.Image(batch["mel_pred"][idx].cpu().detach().numpy(), caption="mel_pred"),    
         # "original_audio": wandb.Audio(batch["wavform"].detach().numpy(), caption="original_audio", sample_rate=22050),
         # "pred_audio": wandb.Audio(batch["wavform_pred"].detach().numpy(), caption="pred_audio", sample_rate=22050),    
     })

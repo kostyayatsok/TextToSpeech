@@ -1,9 +1,9 @@
 {
     "name": "default_config",
-    "batch_size": 1,
+    "batch_size": 48,
     "save_dir": "save_dir",
     "val_split": 0.05,
-    "LJSpeechRoot": "./LJSpeech-1.1.tar",
+    "LJSpeechRoot": ".",
     "wandb": true,
     "wandb_name": "tts",
     "FastSpeech":

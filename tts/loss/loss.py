@@ -22,13 +22,12 @@ class FastSpeechLoss(nn.Module):
         mel_loss = self.criterion_mel(
             batch["mel_pred"], batch["mel"])
         
-        batch["rel_durations_pred"] =\
-            batch["durations_pred"] / batch["mel_length"]
+#         batch["rel_durations_pred"] =\
+#             batch["durations_pred"] / batch["mel_length"]
         duration_loss = self.criterion_duration(
             batch["durations_pred"].float(), batch["durations"].float())
-
-        print(
-            f"Total loss: {(mel_loss + duration_loss).item():.4f}",
-            f"Mel loss: {mel_loss.item():.4f}",
-            f"Dur loss: {duration_loss.item():.8f}")
-        return mel_loss + duration_loss * self.duration_weight
+        return {
+            "loss": mel_loss + duration_loss * self.duration_weight,
+            "mel_loss": mel_loss,
+            "dur_loss": duration_loss
+        }

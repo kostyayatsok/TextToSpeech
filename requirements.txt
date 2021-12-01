@@ -1,0 +1,9 @@
+torch
+torchaudio
+wandb
+librosa
+googledrivedownloader
+pandas
+numpy
+matplotlib
+tqdm
