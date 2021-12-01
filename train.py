@@ -61,13 +61,14 @@ def main(config):
         ).to(device)
         batch['durations'] = batch['rel_durations'] * batch['mel_length'][:, None]
         batch['durations'] = batch['durations'].ceil().long()
+        batch['mask'] = torch.arange(batch['tokens'].size(-1))[None, :] < batch['tokens_length'][:, None]
         outputs = text2mel_model(**batch)
         batch.update(outputs)
         
         batch.update(criterion(batch))
         return batch
     step = 0
-    for epoch in tqdm(range(200)):
+    for epoch in tqdm(range(config["n_epoch"])):
         for batch in train_loader:
             try:
                 batch["epoch"] = epoch
@@ -80,48 +81,54 @@ def main(config):
                 batch["loss"] = batch["loss"].item()
                 batch["dur_loss"] = batch["dur_loss"].item()
                 batch["mel_loss"] = batch["mel_loss"].item()
-                if config["wandb"]:
-                    log_batch(batch)
+                break
             except Exception as inst:
                 print(inst)
                 pass
-
-        # batch["wavform_pred"] = vocoder_model.inference(batch["mel_pred"]).cpu()
-        val_loss = [[],[],[]]
-        for batch in val_loader:
-            try:
-                batch = process_batch(batch)
-                val_loss[0].append(batch["loss"].item())
-                val_loss[1].append(batch["dur_loss"].item())
-                val_loss[2].append(batch["mel_loss"].item())
-            except Exception as inst:
-                print(inst)
-                pass
-        batch["loss"] = np.mean(val_loss[0])
-        batch["dur_loss"] = np.mean(val_loss[1])
-        batch["mel_loss"] = np.mean(val_loss[2])
-
-        batch["epoch"] = epoch
-        batch["step"] = step
-        step += 1           
         if config["wandb"]:
-            log_batch(batch, mode="val")
+            if config["log_audio"]:
+                batch["wavform_pred"] = vocoder_model.inference(batch["mel_pred"]).cpu()
+            else:
+                batch["wavform_pred"] = batch["wavform"]
+            log_batch(batch)
 
+        # with torch.no_grad():
+        #     val_loss = [[],[],[]]
+        #     for batch in val_loader:
+        #         try:
+        #             batch = process_batch(batch)
+        #             val_loss[0].append(batch["loss"])
+        #             val_loss[1].append(batch["dur_loss"])
+        #             val_loss[2].append(batch["mel_loss"])
+        #         except Exception as inst:
+        #             print(inst)
+        #             pass
+        #     batch["loss"] = torch.mean(val_loss[0])
+        #     batch["dur_loss"] = torch.mean(val_loss[1])
+        #     batch["mel_loss"] = torch.mean(val_loss[2])
+        #     batch["wavform_pred"] = vocoder_model.inference(batch["mel_pred"]).cpu()
+        #     batch["epoch"] = epoch
+        #     batch["step"] = step
+        #     step += 1           
+        #     if config["wandb"]:
+        #         log_batch(batch, mode="val")
         torch.save(text2mel_model.state_dict(), "text2mel_model.pt")
+
 def log_batch(batch, mode="train"):
     idx = np.random.randint(batch["mel"].size(0))
     wandb.log({
+        "step": batch["step"],
+        "epoch": batch["epoch"],
         f"loss_{mode}": batch["loss"],
         f"dur_loss_{mode}": batch["dur_loss"],
         f"mel_loss_{mode}": batch["mel_loss"],
-        "step": batch["step"],
-        "epoch": batch["epoch"],
         f"original_mel_{mode}": wandb.Image(batch["mel"][idx].cpu().detach().numpy(), caption="original_mel"),
         f"pred_mel_{mode}": wandb.Image(batch["mel_pred"][idx].cpu().detach().numpy(), caption="mel_pred"),    
-        # "original_audio": wandb.Audio(batch["wavform"].detach().numpy(), caption="original_audio", sample_rate=22050),
-        # "pred_audio": wandb.Audio(batch["wavform_pred"].detach().numpy(), caption="pred_audio", sample_rate=22050),    
+        f"original_audio_{mode}": wandb.Audio(batch["wavform"][idx].cpu().detach().numpy(), caption="original_audio", sample_rate=22050),
+        f"pred_audio_{mode}": wandb.Audio(batch["wavform_pred"][idx].cpu().detach().numpy(), caption="pred_audio", sample_rate=22050),    
     })
 if __name__ == "__main__":
+    #copy-pasted from asr-homework-template
     args = argparse.ArgumentParser(description="PyTorch Template")
     args.add_argument(
         "-c",

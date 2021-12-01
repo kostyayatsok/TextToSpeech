@@ -20,12 +20,13 @@ class FFTBlock(nn.Module):
                  filter_size,
                  dropout):
         super().__init__()
-        self.attention = nn.MultiheadAttention(
-            hidden_size, num_heads, batch_first=True) #TODO: Custom MultiheadAttention implementation
+        self.attention = MultiHeadAttention(num_heads, hidden_size)
         self.conv1d = nn.Sequential(
-            ChannelFirstConv1d(hidden_size, filter_size, kernel_size=kernel_size, padding='same'), 
+            ChannelFirstConv1d(
+                hidden_size, filter_size, kernel_size=kernel_size, padding='same'), 
             nn.ReLU(),
-            ChannelFirstConv1d(filter_size, hidden_size, kernel_size=kernel_size, padding='same'), 
+            ChannelFirstConv1d(
+                filter_size, hidden_size, kernel_size=kernel_size, padding='same'), 
         )
         self.norm_1 = nn.Sequential(
             nn.Dropout(dropout),
@@ -35,8 +36,8 @@ class FFTBlock(nn.Module):
             nn.Dropout(dropout),
             nn.LayerNorm(hidden_size),
         )
-    def forward(self, input):
-        x, _ = self.attention(input, input, input)
+    def forward(self, input, mask, *args, **kwargs):
+        x, _ = self.attention(input, mask)
         residual = input
         x = self.norm_1(x + residual)
         residual = x
@@ -69,25 +70,49 @@ class LengthRegulator(nn.Module):
         return durations
 
 class PositionalEncoding(nn.Module):
-    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+    def __init__(self, d_model, max_len=2000):
         super().__init__()
-        self.dropout = nn.Dropout(p=dropout)
+        positions = torch.arange(max_len)
+        frequancy = 10000.0**(-torch.arange(0, d_model, 2)/d_model)
+        self.posisional_encondig = torch.zeros(max_len, d_model)
+        self.posisional_encondig[:,0::2] =\
+            torch.sin(positions[:,None]*frequancy[None,:])
+        self.posisional_encondig[:,1::2] =\
+            torch.cos(positions[:,None]*frequancy[None,:])
+        self.posisional_encondig.detach()
+        
+    def forward(self, x):
+        return x + self.posisional_encondig[:x.size(1),:]
 
-        position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
-        pe = torch.zeros(max_len, d_model)
-        pe[:,0::2] = torch.sin(position * div_term)
-        pe[:,1::2] = torch.cos(position * div_term)
-        self.register_buffer('pe', pe)
+class MultiHeadAttention(nn.Module):
+    def __init__(self, n_heads, d_model) -> None:
+        super().__init__()
+        self.heads = [AttentionHead(d_model) for _ in range(n_heads)]
+        self.out = nn.Linear(d_model*n_heads, d_model)
+    def forward(self, inputs):
+        x = []
+        for head in self.heads:
+            x.append(head(inputs))
+        x = torch.cat(x, dim=1)
+        return self.out(x)
+        
+class AttentionHead(nn.Module):
+    def __init__(self, d_model) -> None:
+        super().__init__()
+        self.key = nn.Linear(d_model, d_model)
+        self.value = nn.Linear(d_model, d_model)
+        self.query = nn.Linear(d_model, d_model)
+        self.d_model = d_model
+    def forward(self, input, mask):
+        key = self.key(input)
+        query = self.query(input)
+        value = self.value(input)
+        QK = torch.matmul(query, key.transpose(-1, -2)) / torch.sqrt(self.d_model)
+        if mask is not None:
+            QK[mask] = -1e42
+        QK = torch.softmax(QK, dim=-1)
+        return torch.matmul(QK, value)
 
-    def forward(self, x: torch.tensor) -> torch.tensor:
-        """
-        Args:
-            x: Tensor, shape [batch_size, seq_len, embedding_dim]
-        """
-        x = x + self.pe[:x.size(1),:]
-        return self.dropout(x)
-    
 class FastSpeechModel(nn.Module):
     def __init__(self, config, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -110,18 +135,18 @@ class FastSpeechModel(nn.Module):
         x = tokens
         x = self.embeddings(x)
         x = self.positional_encoding_1(x)
-        x = self.encoder(x)
+        x = self.encoder(x, *args, **kwargs)
         
         durations_pred = self.length_regulator(x)
         
         aligned = []
         for one_input, one_dur in zip(x, durations):
-            aligned.append(torch.repeat_interleave(one_input, one_dur.view(-1), dim=-2))        
+            aligned.append(torch.repeat_interleave(one_input, one_dur.view(-1), dim=-2))
         aligned = pad_sequence(aligned, batch_first=True)
         
         x = aligned
         x = self.positional_encoding_2(x)
-        x = self.decoder(x)
+        x = self.decoder(x, *args, **kwargs)
         mel = self.linear_layer(x)
         mel = mel.transpose(1, 2)
         return {

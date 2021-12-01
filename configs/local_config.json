@@ -4,9 +4,10 @@
     "batch_size": 48,
     "save_dir": "save_dir",
     "val_split": 0.05,
-    "LJSpeechRoot": ".",
-    "wandb": true,
+    "LJSpeechRoot": "LJSpeech-1.1.tar/",
+    "wandb": false,
     "wandb_name": "tts",
+    "log_audio": false,
     "FastSpeech":
     {
         "n_phonemes": 42,
