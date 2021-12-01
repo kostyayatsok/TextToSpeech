@@ -1,5 +1,7 @@
 import torch
 from torch import nn
+from torch.nn import functional as F
+
 from torch.nn.utils.rnn import pad_sequence
 import math
 
@@ -36,14 +38,15 @@ class FFTBlock(nn.Module):
             nn.Dropout(dropout),
             nn.LayerNorm(hidden_size),
         )
-    def forward(self, input, mask, *args, **kwargs):
-        x, _ = self.attention(input, mask)
-        residual = input
+    def forward(self, input):
+        x, mask = input
+        residual = x
+        x = self.attention(x, mask)
         x = self.norm_1(x + residual)
         residual = x
         x = self.conv1d(x)
         x = self.norm_2(x + residual)
-        return x
+        return [x, mask]
 
 class LengthRegulator(nn.Module):
     def __init__(self, hidden_size, kernel_size, dropout):
@@ -73,13 +76,14 @@ class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len=2000):
         super().__init__()
         positions = torch.arange(max_len)
-        frequancy = 10000.0**(-torch.arange(0, d_model, 2)/d_model)
-        self.posisional_encondig = torch.zeros(max_len, d_model)
-        self.posisional_encondig[:,0::2] =\
+        #подсмотрел в каком-то туториале торча эту экспоненту
+        frequancy = torch.exp(torch.arange(0, d_model, 2)*(-math.log(10000.0)/d_model))
+        posisional_encondig = torch.zeros(max_len, d_model)
+        posisional_encondig[:,0::2] =\
             torch.sin(positions[:,None]*frequancy[None,:])
-        self.posisional_encondig[:,1::2] =\
+        posisional_encondig[:,1::2] =\
             torch.cos(positions[:,None]*frequancy[None,:])
-        self.posisional_encondig.detach()
+        self.register_buffer('posisional_encondig', posisional_encondig)
         
     def forward(self, x):
         return x + self.posisional_encondig[:x.size(1),:]
@@ -87,31 +91,33 @@ class PositionalEncoding(nn.Module):
 class MultiHeadAttention(nn.Module):
     def __init__(self, n_heads, d_model) -> None:
         super().__init__()
-        self.heads = [AttentionHead(d_model) for _ in range(n_heads)]
-        self.out = nn.Linear(d_model*n_heads, d_model)
-    def forward(self, inputs):
+        self.heads = nn.ModuleList([AttentionHead(d_model, d_model//n_heads) for _ in range(n_heads)])
+        self.out = nn.Linear(d_model//n_heads*n_heads, d_model)
+    def forward(self, inputs, mask):
         x = []
         for head in self.heads:
-            x.append(head(inputs))
-        x = torch.cat(x, dim=1)
-        return self.out(x)
+            x.append(head(inputs, mask))
+        x = torch.cat(x, dim=-1)
+        res = self.out(x)
+        return res
         
 class AttentionHead(nn.Module):
-    def __init__(self, d_model) -> None:
+    def __init__(self, d_model, d_hid) -> None:
         super().__init__()
-        self.key = nn.Linear(d_model, d_model)
-        self.value = nn.Linear(d_model, d_model)
-        self.query = nn.Linear(d_model, d_model)
+        self.key_fn = nn.Linear(d_model, d_hid)
+        self.value_fn = nn.Linear(d_model, d_hid)
+        self.query_fn = nn.Linear(d_model, d_hid)
         self.d_model = d_model
-    def forward(self, input, mask):
-        key = self.key(input)
-        query = self.query(input)
-        value = self.value(input)
-        QK = torch.matmul(query, key.transpose(-1, -2)) / torch.sqrt(self.d_model)
+    def forward(self, inputs, mask):
+        K = self.key_fn(inputs)
+        Q = self.query_fn(inputs)
+        V = self.value_fn(inputs)
+        QK = torch.matmul(Q, K.transpose(-1, -2))/math.sqrt(self.d_model)
         if mask is not None:
-            QK[mask] = -1e42
+            QK[mask] = -1e9
         QK = torch.softmax(QK, dim=-1)
-        return torch.matmul(QK, value)
+        res = torch.matmul(QK, V)
+        return res
 
 class FastSpeechModel(nn.Module):
     def __init__(self, config, *args, **kwargs):
@@ -131,22 +137,25 @@ class FastSpeechModel(nn.Module):
                 for _ in range(config["n_decoder_blocks"])]
         )
         self.linear_layer = nn.Linear(config["hidden_size"], config["n_mels"])
-    def forward(self, tokens, durations, *args, **kwargs):
+    def forward(self, tokens, durations, mask, mel_mask, *args, **kwargs):
         x = tokens
         x = self.embeddings(x)
         x = self.positional_encoding_1(x)
-        x = self.encoder(x, *args, **kwargs)
+        x = self.encoder([x, mask])[0]
         
         durations_pred = self.length_regulator(x)
         
-        aligned = []
-        for one_input, one_dur in zip(x, durations):
+        aligned, aligned_mask = [], []
+        for one_input, one_mask, one_dur in zip(x, mask, durations):
             aligned.append(torch.repeat_interleave(one_input, one_dur.view(-1), dim=-2))
+            aligned_mask.append(torch.repeat_interleave(one_mask, one_dur.view(-1), dim=-1))        
         aligned = pad_sequence(aligned, batch_first=True)
-        
+#         mel_mask = pad_sequence(aligned_mask, batch_first=True)
+#         print(aligned.size(-2)-mel_mask.size(-1))
+        mel_mask = F.pad(mel_mask, (0, aligned.size(-2)-mel_mask.size(-1), 0, 0))
         x = aligned
         x = self.positional_encoding_2(x)
-        x = self.decoder(x, *args, **kwargs)
+        x = self.decoder([x, mel_mask])[0]
         mel = self.linear_layer(x)
         mel = mel.transpose(1, 2)
         return {
