@@ -137,22 +137,25 @@ class FastSpeechModel(nn.Module):
                 for _ in range(config["n_decoder_blocks"])]
         )
         self.linear_layer = nn.Linear(config["hidden_size"], config["n_mels"])
-    def forward(self, tokens, durations, mask, mel_mask, *args, **kwargs):
+    
+    def forward(self, tokens, mask, durations=None, mel_mask=None, *args, **kwargs):
         x = tokens
         x = self.embeddings(x)
         x = self.positional_encoding_1(x)
         x = self.encoder([x, mask])[0]
         
         durations_pred = self.length_regulator(x)
-        
+        if durations is None:
+            durations = durations_pred
         aligned, aligned_mask = [], []
         for one_input, one_mask, one_dur in zip(x, mask, durations):
             aligned.append(torch.repeat_interleave(one_input, one_dur.view(-1), dim=-2))
             aligned_mask.append(torch.repeat_interleave(one_mask, one_dur.view(-1), dim=-1))        
         aligned = pad_sequence(aligned, batch_first=True)
-#         mel_mask = pad_sequence(aligned_mask, batch_first=True)
-#         print(aligned.size(-2)-mel_mask.size(-1))
-        mel_mask = F.pad(mel_mask, (0, aligned.size(-2)-mel_mask.size(-1), 0, 0))
+        if mel_mask is None:
+            mel_mask = pad_sequence(aligned_mask, batch_first=True)
+        else:
+            mel_mask = F.pad(mel_mask, (0, aligned.size(-2)-mel_mask.size(-1), 0, 0))
         x = aligned
         x = self.positional_encoding_2(x)
         x = self.decoder([x, mel_mask])[0]
@@ -162,3 +165,6 @@ class FastSpeechModel(nn.Module):
           "mel_pred": mel,
           "durations_pred": durations_pred
         }
+    def inference(self, tokens, mask):
+        mel, dur = self.forward(tokens, mask)
+        return mel

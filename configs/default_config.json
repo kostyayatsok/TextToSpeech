@@ -8,7 +8,7 @@
     "wandb": 100,
     "wandb_name": "tts",
     "log_audio": true,
-    "save_period": 1000,
+    "save_period": 1,
     "FastSpeech":
     {
         "n_phonemes": 42,
