@@ -11,14 +11,15 @@ from tts.models import FastSpeechModel
 from tts.utils import MetricsTracker
 from tts.utils.util import write_json
 from tqdm import tqdm
-
+import torchaudio
 class Trainer:
     def __init__(self, config):
         self.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
         self.run_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        os.makedirs(f"{config['save_dir']}/{self.run_id}/", exist_ok=True)
+        os.makedirs(f"{config['save_dir']}/{self.run_id}/weights/", exist_ok=True)
         write_json(config.config, f"{config['save_dir']}/{self.run_id}/config.json")
         
+        self.tokenizer = torchaudio.pipelines.TACOTRON2_GRIFFINLIM_CHAR_LJSPEECH.get_text_processor()
         self.train_loader, self.val_loader = build_dataloaders(config)
         print(f"Use {len(self.train_loader)} samples for training and",
                                         f"{len(self.val_loader)} for validation.")
@@ -31,6 +32,8 @@ class Trainer:
         self.optimizer = config.init_obj(
             config["optimizer"], torch.optim, self.text2mel_model.parameters()
         )
+        self.scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            self.optimizer, max_lr=5e-4, steps_per_epoch=len(self.train_loader), epochs=config["n_epoch"])
         
         self.criterion = config.init_obj(config["loss"], tts.loss)
         
@@ -48,7 +51,7 @@ class Trainer:
     def train(self):
         for self.epoch in tqdm(range(1, self.config["n_epoch"]+1)):
             self.text2mel_model.train()
-            for batch in self.train_loader:
+            for batch in tqdm(self.train_loader):
                 try:
                     self.step += 1
                     self.optimizer.zero_grad()
@@ -60,9 +63,14 @@ class Trainer:
                     if self.config["wandb"] and\
                         self.step % self.config["wandb"] == 0:
                             self.log_batch(batch)
+                    self.scheduler.step()
+                    batch["lr"] = self.scheduler.get_last_lr()
                 except Exception as inst:
                     print(inst)
 
+            if self.config["wandb"]:
+                self.log_batch(batch)
+                    
             self.text2mel_model.eval()
             with torch.no_grad():
                 for batch in self.val_loader:
@@ -71,20 +79,25 @@ class Trainer:
                         self.metrics(batch)
                     except Exception as inst:
                         print(inst)
-                if self.config["wandb"]:
-                    self.log_batch(batch, mode="val")
+            if self.config["wandb"]:
+                self.log_batch(batch, mode="val")
             self.log_test()
             if self.config["save_period"] and\
                 self.epoch % self.config["save_period"] == 0:
                     torch.save(
                         self.text2mel_model.state_dict(),
-                        f"{self.config['save_dir']}/\
-                            {self.run_id}/weights/text2mel_model.pt"
+                        f"{self.config['save_dir']}/"+\
+                        f"{self.run_id}/weights/text2mel_model.pt"
                     )
         
 
     
     def process_batch(self, batch):
+        #move tensors to cuda:
+        for key in [
+            "waveform", "waveform_length", "tokens", "token_lengths"]:
+                batch[key] = batch[key].to(self.device)
+            
         #creating mel spectrogram from ground truth wav
         batch.update(
             self.featurizer(batch["waveform"], batch["waveform_length"])
@@ -92,7 +105,7 @@ class Trainer:
         #get relative durations from aligner
         batch['rel_durations'] = self.aligner(
             batch["waveform"], batch["waveform_length"], batch["transcript"]
-        )
+        ).to(self.device)
         #convert relative durations to absolute
         batch['durations'] = batch['rel_durations']*batch['mel_length'][:, None]
         batch['durations'] = batch['durations'].round().long()
@@ -102,7 +115,7 @@ class Trainer:
             batch['tokens'].size(-1), batch['token_lengths'])
         batch['mel_mask'] = self.lens2mask(
             batch['mel'].size(-1), batch['mel_length'])
-        
+            
         #run model
         outputs = self.text2mel_model(**batch)
         batch.update(outputs)
@@ -113,15 +126,15 @@ class Trainer:
     
     def log_batch(self, batch, mode="train"):
         idx = np.random.randint(batch["mel"].size(0))
-        mel = batch["mel"][idx]
-        mel_pred = batch["mel_pred"][idx]
+        mel = batch["mel"][idx].unsqueeze(0)
+        mel_pred = batch["mel_pred"][idx].unsqueeze(0)
         wav = batch["waveform"][idx].cpu().detach().numpy()
-        wav_rest = self.vocoder.inference(mel).cpu()
-        wav_pred = self.vocoder.inference(mel_pred).cpu()
-        mel = mel.cpu().detach().numpy()
-        mel_pred = mel_pred.cpu().detach().numpy()
+        wav_rest = self.vocoder.inference(mel).cpu().detach().numpy()[0]
+        wav_pred = self.vocoder.inference(mel_pred).cpu().detach().numpy()[0]
+        mel = mel.squeeze(0).cpu().detach().numpy()
+        mel_pred = mel_pred.squeeze(0).cpu().detach().numpy()
         
-        wandb.log({
+        dict2log = {
             "step": self.step,
             "epoch": self.epoch,
             f"loss_{mode}": self.metrics["loss"],
@@ -130,23 +143,29 @@ class Trainer:
             f"orig_mel_{mode}": wandb.Image(mel, caption="Original mel"),
             f"pred_mel_{mode}": wandb.Image(mel_pred, caption="Predicted mel"),    
             f"orig_audio_{mode}": wandb.Audio(
-                wav, caption="Original audio", sample_rate=22050),
+                wav, caption="Original_audio", sample_rate=22050),
             f"rest_audio_{mode}": wandb.Audio(
                 wav_rest,
-                caption="Audio from original mel", sample_rate=22050),
+                caption="Audio_from_original_mel", sample_rate=22050),
             f"pred_audio_{mode}": wandb.Audio(
                 wav_pred,
-                caption="Audio from predicted mel", sample_rate=22050),    
-        })
+                caption="Audio_from_predicted_mel", sample_rate=22050),
+            f"text_{mode}": wandb.Html(batch["transcript"][idx]),
+        }
+        if "lr" in batch:
+            dict2log["lr"] = batch["lr"]
+        wandb.log(dict2log)
 
     @torch.no_grad()
     def log_test(self):
         self.text2mel_model.eval()
         for i, text in enumerate(self.config["TestData"]):
             tokens, length = self.tokenizer(text)
-            mask = self.lens2mask(length)
+            tokens = tokens.to(self.device)
+            mask = torch.ones(tokens.size(), dtype=torch.bool, device=self.device)
             mel = self.text2mel_model.inference(tokens, mask)
-            wav = self.vocoder.inference(mel).cpu()
+            wav = self.vocoder.inference(mel).cpu().detach().numpy()[0]
+            mel = mel.cpu().detach().numpy()[0]
             wandb.log({
                 "step": self.step,
                 "epoch": self.epoch,
@@ -156,5 +175,5 @@ class Trainer:
             })
             
     def lens2mask(self, max_len, lens):
-        return torch.arange(max_len)[None, :] < lens[:, None]
+        return torch.arange(max_len, device=lens.device)[None, :] < lens[:, None]
 
