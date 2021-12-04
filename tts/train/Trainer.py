@@ -51,20 +51,21 @@ class Trainer:
     def train(self):
         for self.epoch in tqdm(range(1, self.config["n_epoch"]+1)):
             self.text2mel_model.train()
-            for batch in tqdm(self.train_loader):
+            for batch in self.train_loader:
                 try:
-                    self.step += 1
                     self.optimizer.zero_grad()
                     
                     batch = self.process_batch(batch)
                     self.metrics(batch)
                     batch["loss"].backward()
                     self.optimizer.step()
+                    self.scheduler.step()
+                    batch["lr"] = self.scheduler.get_last_lr()[0]
+                    
                     if self.config["wandb"] and\
                         self.step % self.config["wandb"] == 0:
                             self.log_batch(batch)
-                    self.scheduler.step()
-                    batch["lr"] = self.scheduler.get_last_lr()
+                    self.step += 1
                 except Exception as inst:
                     print(inst)
 

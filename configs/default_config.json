@@ -1,6 +1,6 @@
 {
     "name": "default_config",
-    "n_epoch": 300,
+    "n_epoch": 150,
     "batch_size": 64,
     "save_dir": "save_dir",
     "val_split": 0.05,
