@@ -27,13 +27,19 @@ class Trainer:
         self.text2mel_model = FastSpeechModel(config["FastSpeech"]).to(self.device)
         print(f"Total model parameters: \
             {sum(p.numel() for p in self.text2mel_model.parameters())}")
+        if config.resume is not None:
+            print(f"Load text-to-mel model from checkpoint {config.resume}")
+            self.text2mel_model.load_state_dict(torch.load(config.resume))
+
         self.vocoder = Vocoder().to(self.device).eval()
 
         self.optimizer = config.init_obj(
             config["optimizer"], torch.optim, self.text2mel_model.parameters()
         )
-        self.scheduler = torch.optim.lr_scheduler.OneCycleLR(
-            self.optimizer, max_lr=5e-4, steps_per_epoch=len(self.train_loader), epochs=config["n_epoch"])
+        self.scheduler = config.init_obj(
+            config["scheduler"], torch.optim.lr_scheduler, self.optimizer,
+            steps_per_epoch=len(self.train_loader), epochs=config["n_epoch"]
+        )
         
         self.criterion = config.init_obj(config["loss"], tts.loss)
         
