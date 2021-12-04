@@ -5,7 +5,7 @@
     "save_dir": "save_dir",
     "val_split": 0.05,
     "LJSpeechRoot": ".",
-    "wandb": 50,
+    "wandb": 100,
     "wandb_name": "tts",
     "log_audio": true,
     "save_period": 1,
@@ -41,7 +41,7 @@
         "type": "Adam",
         "args":
         {
-          "lr": 1e-5
+          "lr": 5e-6
         }
     },
     "scheduler":
@@ -49,7 +49,7 @@
         "type": "OneCycleLR",
         "args":
         {
-            "max_lr": 7e-5
+            "max_lr": 5e-5
         }
     },
     "loss":

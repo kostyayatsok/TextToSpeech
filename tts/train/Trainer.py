@@ -16,7 +16,7 @@ class Trainer:
     def __init__(self, config):
         self.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
         self.run_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        os.makedirs(f"{config['save_dir']}/{self.run_id}/weights/", exist_ok=True)
+        os.makedirs(f"{config['save_dir']}/{self.run_id}/", exist_ok=True)
         write_json(config.config, f"{config['save_dir']}/{self.run_id}/config.json")
         
         self.tokenizer = torchaudio.pipelines.TACOTRON2_GRIFFINLIM_CHAR_LJSPEECH.get_text_processor()
@@ -88,13 +88,13 @@ class Trainer:
                         print(inst)
             if self.config["wandb"]:
                 self.log_batch(batch, mode="val")
-            self.log_test()
+                self.log_test()
             if self.config["save_period"] and\
                 self.epoch % self.config["save_period"] == 0:
                     torch.save(
                         self.text2mel_model.state_dict(),
                         f"{self.config['save_dir']}/"+\
-                        f"{self.run_id}/weights/text2mel_model.pt"
+                        f"{self.run_id}/text2mel_model.pt"
                     )
         
 

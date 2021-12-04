@@ -166,7 +166,7 @@ class FastSpeechModel(nn.Module):
           "durations_pred": durations_pred
         }
     @torch.no_grad()
-    def inference(self, tokens, mask, silens_value=-11.5129251):
+    def inference(self, tokens, mask, silence_value=-11.5129251):
         mel = self.forward(tokens, mask)["mel_pred"]
-        mel = F.pad(mel, (0, 40), pad_value=silens_value)
+        mel = F.pad(mel, (0, 40), value=silence_value)
         return mel
