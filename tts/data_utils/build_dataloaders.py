@@ -15,8 +15,10 @@ def build_dataloaders(config):
         )
     else:
         train_dataset = dataset
+        val_loader=None
     train_loader = DataLoader(
         train_dataset, batch_size=config['batch_size'],
-        collate_fn=LJSpeechCollator()
+        collate_fn=LJSpeechCollator(), shuffle=True, pin_memory=True,
+        num_workers=3,
     )
     return train_loader, val_loader

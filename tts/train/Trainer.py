@@ -21,8 +21,8 @@ class Trainer:
         
         self.tokenizer = torchaudio.pipelines.TACOTRON2_GRIFFINLIM_CHAR_LJSPEECH.get_text_processor()
         self.train_loader, self.val_loader = build_dataloaders(config)
-        print(f"Use {len(self.train_loader)} samples for training and",
-                                        f"{len(self.val_loader)} for validation.")
+        print(f"Use {len(self.train_loader)} batches for training and",
+                                        f"{0 if self.val_loader is None else len(self.val_loader)} for validation.")
             
         self.text2mel_model = FastSpeechModel(config["FastSpeech"]).to(self.device)
         print(f"Total model parameters: \
@@ -79,15 +79,17 @@ class Trainer:
                 self.log_batch(batch)
                     
             self.text2mel_model.eval()
-            with torch.no_grad():
-                for batch in self.val_loader:
-                    try:
-                        batch = self.process_batch(batch)
-                        self.metrics(batch)
-                    except Exception as inst:
-                        print(inst)
+            if self.val_loader is not None:
+                with torch.no_grad():
+                    for batch in self.val_loader:
+                        try:
+                            batch = self.process_batch(batch)
+                            self.metrics(batch)
+                        except Exception as inst:
+                            print(inst)
+                if self.config["wandb"]:
+                    self.log_batch(batch, mode="val")
             if self.config["wandb"]:
-                self.log_batch(batch, mode="val")
                 self.log_test()
             if self.config["save_period"] and\
                 self.epoch % self.config["save_period"] == 0:
@@ -182,5 +184,5 @@ class Trainer:
             })
             
     def lens2mask(self, max_len, lens):
-        return torch.arange(max_len, device=lens.device)[None, :] < lens[:, None]
+        return torch.arange(max_len, device=lens.device)[None, :] <= lens[:, None]
 

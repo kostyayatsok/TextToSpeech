@@ -3,7 +3,7 @@
     "n_epoch": 20,
     "batch_size": 64,
     "save_dir": "save_dir",
-    "val_split": 0.05,
+    "val_split": 0.0,
     "LJSpeechRoot": ".",
     "wandb": 100,
     "wandb_name": "tts",
@@ -41,7 +41,7 @@
         "type": "Adam",
         "args":
         {
-          "lr": 5e-6
+          "lr": 1e-7
         }
     },
     "scheduler":
@@ -49,7 +49,7 @@
         "type": "OneCycleLR",
         "args":
         {
-            "max_lr": 5e-5
+            "max_lr": 1e-5
         }
     },
     "loss":
@@ -57,7 +57,7 @@
         "type": "FastSpeechLoss",
         "args":
         {
-            "duration_weight": 1,
+            "duration_weight": 10,
             "mel_silence_value": -11.5129251
         }
     },
