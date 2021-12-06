@@ -146,7 +146,8 @@ class FastSpeechModel(nn.Module):
         
         durations_pred = self.length_regulator(x)
         if durations is None:
-            durations = durations_pred.long()
+            durations = durations_pred.round().long()
+
         aligned, aligned_mask = [], []
         for one_input, one_mask, one_dur in zip(x, mask, durations):
             aligned.append(torch.repeat_interleave(one_input, one_dur.view(-1), dim=-2))
@@ -168,5 +169,5 @@ class FastSpeechModel(nn.Module):
     @torch.no_grad()
     def inference(self, tokens, mask, silence_value=-11.5129251):
         mel = self.forward(tokens, mask)["mel_pred"]
-        mel = F.pad(mel, (0, 40), value=silence_value)
+        mel = F.pad(mel, (0, 80), value=silence_value)
         return mel

@@ -50,6 +50,7 @@ def text2wav(text, path):
     tokenizer = torchaudio.pipelines.TACOTRON2_GRIFFINLIM_CHAR_LJSPEECH.get_text_processor()
     
     tokens, length = tokenizer(text)
+    tokens = torch.cat((tokens,tokens[0,-1].view(1, -1)), dim=-1)
     tokens = tokens.to(device)
     mask = torch.ones(tokens.size(), dtype=torch.bool, device=device)
     mel = text2mel_model.inference(tokens, mask)
