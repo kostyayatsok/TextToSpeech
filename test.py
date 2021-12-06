@@ -53,7 +53,7 @@ def text2wav(text, path):
     tokens = tokens.to(device)
     mask = torch.ones(tokens.size(), dtype=torch.bool, device=device)
     mel = text2mel_model.inference(tokens, mask)
-    wav = vocoder.inference(mel).cpu().detach().numpy()[0]
+    wav = vocoder.inference(mel)[0].cpu().view(1, -1)
     
     torchaudio.save(path, wav, 22050)
 
