@@ -15,5 +15,5 @@ python3 train.py -c configs/default_config.json
 
 ## Predict
 ```console
-python3 test.py -o path/to/output <input.txt
+python3 test.py -o dir/to/save/output <input.txt
 ```
