@@ -70,4 +70,5 @@ if __name__ == "__main__":
     args = args.parse_args()
     
     for text in sys.stdin:
+        text = text.rstrip()
         text2wav(text, f"{args.output}/{text}.wav")
