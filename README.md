@@ -19,6 +19,6 @@ python3 test.py -o dir/to/save/output <input.txt
 ```
 
 ## Wandb
-report: https://wandb.ai/kostyayatsok/tts/reports/Text-to-speech-report--VmlldzoxMzAxMTI3
-all runs: https://wandb.ai/kostyayatsok/tts?workspace=user-kostyayatsok
-best run: https://wandb.ai/kostyayatsok/tts/runs/2f339aje?workspace=user-kostyayatsok
+- report: https://wandb.ai/kostyayatsok/tts/reports/Text-to-speech-report--VmlldzoxMzAxMTI3
+- all runs: https://wandb.ai/kostyayatsok/tts?workspace=user-kostyayatsok
+- best run: https://wandb.ai/kostyayatsok/tts/runs/2f339aje?workspace=user-kostyayatsok
