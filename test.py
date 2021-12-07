@@ -37,7 +37,7 @@ weights_path = './FastSpeechWeights.pt'
 
 def text2wav(text, path):
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-    text2mel_model = FastSpeechModel(fast_speech_config).to(device)
+    text2mel_model = FastSpeechModel(fast_speech_config).to(device).eval()
     if not os.path.exists(weights_path):
         from google_drive_downloader import GoogleDriveDownloader as gdd
         gdd.download_file_from_google_drive(
@@ -45,12 +45,10 @@ def text2wav(text, path):
             dest_path=weights_path
         )
     text2mel_model.load_state_dict(torch.load(weights_path))
-    text2mel_model = text2mel_model.eval()
     vocoder = Vocoder().to(device).eval()
     tokenizer = torchaudio.pipelines.TACOTRON2_GRIFFINLIM_CHAR_LJSPEECH.get_text_processor()
     
-    tokens, length = tokenizer(text)
-    tokens = torch.cat((tokens,tokens[0,-1].view(1, -1)), dim=-1)
+    tokens, length = tokenizer(text + " a")
     tokens = tokens.to(device)
     mask = torch.ones(tokens.size(), dtype=torch.bool, device=device)
     mel = text2mel_model.inference(tokens, mask)

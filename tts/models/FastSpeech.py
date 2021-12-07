@@ -114,7 +114,7 @@ class AttentionHead(nn.Module):
         V = self.value_fn(inputs)
         QK = torch.matmul(Q, K.transpose(-1, -2))/math.sqrt(self.d_model)
         if mask is not None:
-            QK[mask] = -1e9
+            QK[~mask] = -1e9
         QK = torch.softmax(QK, dim=-1)
         res = torch.matmul(QK, V)
         return res
